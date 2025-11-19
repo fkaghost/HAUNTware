@@ -177,74 +177,54 @@ class Game:
     #                       WIFI ADAPTER MODE SCREEN
     # -------------------------------------------------------------------------
     def wifi_adapter_screen(self):
-        """
-        Menu for setting wlan1 to Monitor or Managed mode.
-        """
-
-        bg = pygame.Surface((self.WIDTH, self.HEIGHT))
-        bg.fill((10, 10, 10))
-
-        title_font = load_and_scale_font(FONT_SLIMESPOOKY, 28, self.scale_y)
         pixel = load_and_scale_font(FONT_PIXEL, 12, self.scale_y)
-
-        title = title_font.render("WiFi Adapter", True, RED)
-        mon_srf = pixel.render("Set wlan1 → Monitor Mode", True, WHITE)
-        man_srf = pixel.render("Set wlan1 → Managed Mode", True, WHITE)
-        back_srf = pixel.render("Back", True, WHITE)
-
+    
         options = [
-            (mon_srf, 150, "MONITOR"),
-            (man_srf, 190, "MANAGED"),
-            (back_srf, 230, "BACK"),
+            ("Set wlan1 → Monitor", pixel.render("Set wlan1 → Monitor", True, WHITE), "MONITOR"),
+            ("Set wlan1 → Managed", pixel.render("Set wlan1 → Managed", True, WHITE), "MANAGED"),
+            ("Back",                pixel.render("Back", True, WHITE),                "BACK"),
         ]
-
-        sel = 0
+    
+        index = 0
         clock = pygame.time.Clock()
+    
         running = True
-
         while running:
-            for e in pygame.event.get():
-                if e.type == pygame.QUIT:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
                     return
-                elif e.type == pygame.KEYDOWN:
-
-                    if e.key in (pygame.K_UP, pygame.K_w):
-                        sel = max(0, sel - 1)
-                    elif e.key in (pygame.K_DOWN, pygame.K_s):
-                        sel = min(len(options) - 1, sel + 1)
-
-                    elif e.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                        label = options[sel][2]
-
+                elif event.type == pygame.KEYDOWN:
+                    if event.key in (pygame.K_UP, pygame.K_w):
+                        index = (index - 1) % len(options)
+                    elif event.key in (pygame.K_DOWN, pygame.K_s):
+                        index = (index + 1) % len(options)
+                    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        text, surf, label = options[index]
                         if label == "MONITOR":
-                            print("[ADAPTER] Setting wlan1 → monitor")
-                            import os
                             os.system("sudo ip link set wlan1 down")
-                            os.system("sudo iw wlan1 set monitor control")
+                            os.system("sudo iwconfig wlan1 mode monitor")
                             os.system("sudo ip link set wlan1 up")
-
                         elif label == "MANAGED":
-                            print("[ADAPTER] Setting wlan1 → managed")
-                            import os
                             os.system("sudo ip link set wlan1 down")
-                            os.system("sudo iw wlan1 set type managed")
+                            os.system("sudo iwconfig wlan1 mode managed")
                             os.system("sudo ip link set wlan1 up")
-
                         elif label == "BACK":
                             return
-
-                    elif e.key == pygame.K_ESCAPE:
+                    elif event.key == pygame.K_ESCAPE:
                         return
-
-            self.screen.blit(bg, (0, 0))
-            self.screen.blit(title, (20, 40))
-
-            for i, (surf, y, _) in enumerate(options):
-                x = (self.WIDTH - surf.get_width()) // 2
-                color = GREEN if i == sel else WHITE
-                render = pixel.render(surf.get_text(), True, color)
+    
+            # Render screen
+            self.screen.fill((10, 10, 10))
+    
+            y = 140
+            for i, (text, surf, label) in enumerate(options):
+                color = GREEN if i == index else WHITE
+                render = pixel.render(text, True, color)
+                x = (self.WIDTH - render.get_width()) // 2
                 self.screen.blit(render, (x, y))
-
+                y += 40
+    
             pygame.display.flip()
             clock.tick(60)
 
