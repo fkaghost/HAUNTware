@@ -5,75 +5,97 @@ import time
 from game.assets import load_and_scale_font, load_and_scale_image
 from game.ui import UI
 from game.world import Character, Camera
-from bettercap.client_wifi import BettercapWifiClient
+
+# --- Bettercap modules ---
+from bettercap.client import BettercapWifiClient
 from bettercap.control import start_bettercap, stop_bettercap, bettercap_is_running
+
+# --- HAUNTware config ---
 from config import (
-    BASE_WIDTH, BASE_HEIGHT, WIDTH, HEIGHT, SCALE_Y,
+    BASE_WIDTH, BASE_HEIGHT,
+    WIDTH, HEIGHT, SCALE_Y,
     RED, WHITE, GREEN,
-    BACKGROUND_PATH, CURSOR_IMAGE_PATH, FONT_SLIMESPOOKY, FONT_PIXEL,
+    BACKGROUND_PATH, CURSOR_IMAGE_PATH,
+    FONT_SLIMESPOOKY, FONT_PIXEL,
     MAP_IMAGE_PATH,
 )
 
 
 class Game:
     def __init__(self):
+        # Basic resolution metrics
         self.BASE_WIDTH, self.BASE_HEIGHT = BASE_WIDTH, BASE_HEIGHT
-        self.WIDTH, self.HEIGHT = WIDTH, HEIGHT
-        self.scale_y = SCALE_Y
 
         pygame.init()
         pygame.display.set_caption("HAUNTware")
+
+        # --- Fullscreen for Raspberry Pi ---
         info = pygame.display.Info()
         self.WIDTH  = info.current_w
         self.HEIGHT = info.current_h
         self.scale_x = self.WIDTH / BASE_WIDTH
         self.scale_y = self.HEIGHT / BASE_HEIGHT
+
         self.screen = pygame.display.set_mode(
             (self.WIDTH, self.HEIGHT),
             pygame.FULLSCREEN | pygame.NOFRAME
         )
         pygame.mouse.set_visible(False)
 
+        # ---- Bettercap WiFi client ----
         self.wifi_client = BettercapWifiClient(poll_interval=1.0)
+
+        # ---- Cursor image ----
         self.cursor_image = load_and_scale_image(CURSOR_IMAGE_PATH, (64, 64), use_alpha=True)
 
-    # ---------- Bettercap control ----------
+    # -------------------------------------------------------------------------
+    #                          BETTERCAP CONTROL
+    # -------------------------------------------------------------------------
     def start_bettercap_wifi(self):
         if bettercap_is_running():
             self.wifi_client.start()
             return
 
-        ok = start_bettercap()
-        if ok:
+        success = start_bettercap()
+        if success:
+            print("[BETTERCAP] Started successfully.")
             self.wifi_client.start()
         else:
-            print("[BETTERCAP] Failed to start or API not reachable")
+            print("[BETTERCAP] Could not start. Is bettercap running?")
 
     def stop_bettercap_wifi(self):
         self.wifi_client.stop()
         if bettercap_is_running():
             stop_bettercap()
 
-    # ---------- Main menu ----------
+    # -------------------------------------------------------------------------
+    #                            MAIN MENU LOOP
+    # -------------------------------------------------------------------------
     def game_loop(self):
-        self.background = load_and_scale_image(BACKGROUND_PATH, (self.WIDTH, self.HEIGHT), use_alpha=False)
+        self.background = load_and_scale_image(
+            BACKGROUND_PATH,
+            (self.WIDTH, self.HEIGHT),
+            use_alpha=False
+        )
 
         slimespooky = load_and_scale_font(FONT_SLIMESPOOKY, 40, self.scale_y)
-        pixel       = load_and_scale_font(FONT_PIXEL,       12, self.scale_y)
+        pixel = load_and_scale_font(FONT_PIXEL, 12, self.scale_y)
 
-        hauntware_text = slimespooky.render("HAUNTware", True, RED)
-        start_game_srf = pixel.render("Start Game", True, WHITE)
-        wifi_srf       = pixel.render("Bettercap WiFi", True, WHITE)
-        options_srf    = pixel.render("Options", True, WHITE)
-        exit_srf       = pixel.render("Exit", True, WHITE)
+        hauntware_srf = slimespooky.render("HAUNTware", True, RED)
+        start_srf     = pixel.render("Start Game", True, WHITE)
+        wifi_srf      = pixel.render("Bettercap WiFi", True, WHITE)
+        adapter_srf   = pixel.render("WiFi Adapter", True, WHITE)
+        options_srf   = pixel.render("Options", True, WHITE)
+        exit_srf      = pixel.render("Exit", True, WHITE)
 
         # (surface, base_y, label)
         texts = [
-            (hauntware_text, 120, "TITLE"),
-            (start_game_srf, 173, "START"),
-            (wifi_srf,       198, "WIFI"),
-            (options_srf,    223, "OPTIONS"),
-            (exit_srf,       248, "EXIT"),
+            (hauntware_srf, 120, "TITLE"),
+            (start_srf,     173, "START"),
+            (wifi_srf,      198, "WIFI"),
+            (adapter_srf,   223, "ADAPTER"),
+            (options_srf,   248, "OPTIONS"),
+            (exit_srf,      273, "EXIT"),
         ]
 
         menu_index = 1
@@ -85,56 +107,65 @@ class Game:
 
         while running:
             for event in pygame.event.get():
+
                 if event.type == pygame.QUIT:
                     running = False
+
                 elif event.type == pygame.KEYDOWN:
                     if event.key in (pygame.K_UP, pygame.K_w):
                         menu_index = max(1, menu_index - 1)
+
                     elif event.key in (pygame.K_DOWN, pygame.K_s):
                         menu_index = min(len(texts) - 1, menu_index + 1)
+
                     elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                         label = texts[menu_index][2]
+
                         if label == "START":
                             print("[MENU] Start Game selected")
                             self.game_screen()
+
                         elif label == "WIFI":
                             print("[MENU] Bettercap WiFi selected")
                             self.start_bettercap_wifi()
                             self.wifi_devices_screen()
+
+                        elif label == "ADAPTER":
+                            print("[MENU] WiFi Adapter settings selected")
+                            self.wifi_adapter_screen()
+
                         elif label == "OPTIONS":
                             print("[MENU] Options selected")
+
                         elif label == "EXIT":
-                            print("[MENU] Exit selected")
                             running = False
+
                     elif event.key == pygame.K_ESCAPE:
                         if bettercap_is_running():
                             self.stop_bettercap_wifi()
-                        else:
-                            running = False
+                        running = False
 
-            # Badge next to Bettercap WiFi
+            # --- Running badge next to Bettercap WiFi ---
             if bettercap_is_running():
                 wifi_surface, base_y, _ = texts[2]
-                text_w, text_h = wifi_surface.get_size()
-                x = (self.WIDTH - text_w) // 2
+                x = (self.WIDTH - wifi_surface.get_width()) // 2
                 y = int(base_y * self.scale_y)
                 ui.badge_overlay = (
                     status_font.render("[RUNNING]", True, GREEN),
-                    (x + text_w + 12, y),
+                    (x + wifi_surface.get_width() + 12, y)
                 )
             else:
                 ui.badge_overlay = None
 
-            # cursor
-            focus_surface, base_y, _ = texts[menu_index]
-            text_w, text_h = focus_surface.get_size()
+            # --- Cursor position ---
+            focus_srf, base_y, _ = texts[menu_index]
+            text_w, text_h = focus_srf.get_size()
             cursor_pos = (
                 (self.WIDTH - text_w) // 2 - self.cursor_image.get_width() - 10,
                 int(base_y * self.scale_y) + (text_h - self.cursor_image.get_height()) // 2,
             )
 
-            # ui expects list of (surface, base_y)
-            ui.draw_menu([(t[0], t[1]) for t in texts], menu_index, cursor_pos)
+            ui.draw_menu([(s, y) for s, y, _ in texts], menu_index, cursor_pos)
             pygame.display.flip()
             clock.tick(60)
 
@@ -142,9 +173,88 @@ class Game:
             self.stop_bettercap_wifi()
         pygame.quit()
 
-    # ---------- Bettercap WiFi devices screen ----------
+    # -------------------------------------------------------------------------
+    #                       WIFI ADAPTER MODE SCREEN
+    # -------------------------------------------------------------------------
+    def wifi_adapter_screen(self):
+        """
+        Menu for setting wlan1 to Monitor or Managed mode.
+        """
+
+        bg = pygame.Surface((self.WIDTH, self.HEIGHT))
+        bg.fill((10, 10, 10))
+
+        title_font = load_and_scale_font(FONT_SLIMESPOOKY, 28, self.scale_y)
+        pixel = load_and_scale_font(FONT_PIXEL, 12, self.scale_y)
+
+        title = title_font.render("WiFi Adapter", True, RED)
+        mon_srf = pixel.render("Set wlan1 → Monitor Mode", True, WHITE)
+        man_srf = pixel.render("Set wlan1 → Managed Mode", True, WHITE)
+        back_srf = pixel.render("Back", True, WHITE)
+
+        options = [
+            (mon_srf, 150, "MONITOR"),
+            (man_srf, 190, "MANAGED"),
+            (back_srf, 230, "BACK"),
+        ]
+
+        sel = 0
+        clock = pygame.time.Clock()
+        running = True
+
+        while running:
+            for e in pygame.event.get():
+                if e.type == pygame.QUIT:
+                    return
+                elif e.type == pygame.KEYDOWN:
+
+                    if e.key in (pygame.K_UP, pygame.K_w):
+                        sel = max(0, sel - 1)
+                    elif e.key in (pygame.K_DOWN, pygame.K_s):
+                        sel = min(len(options) - 1, sel + 1)
+
+                    elif e.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        label = options[sel][2]
+
+                        if label == "MONITOR":
+                            print("[ADAPTER] Setting wlan1 → monitor")
+                            import os
+                            os.system("sudo ip link set wlan1 down")
+                            os.system("sudo iw wlan1 set monitor control")
+                            os.system("sudo ip link set wlan1 up")
+
+                        elif label == "MANAGED":
+                            print("[ADAPTER] Setting wlan1 → managed")
+                            import os
+                            os.system("sudo ip link set wlan1 down")
+                            os.system("sudo iw wlan1 set type managed")
+                            os.system("sudo ip link set wlan1 up")
+
+                        elif label == "BACK":
+                            return
+
+                    elif e.key == pygame.K_ESCAPE:
+                        return
+
+            self.screen.blit(bg, (0, 0))
+            self.screen.blit(title, (20, 40))
+
+            for i, (surf, y, _) in enumerate(options):
+                x = (self.WIDTH - surf.get_width()) // 2
+                color = GREEN if i == sel else WHITE
+                render = pixel.render(surf.get_text(), True, color)
+                self.screen.blit(render, (x, y))
+
+            pygame.display.flip()
+            clock.tick(60)
+
+    # -------------------------------------------------------------------------
+    #                  WIFI DEVICE LIST — BETTERCAP SCAN
+    # -------------------------------------------------------------------------
     def wifi_devices_screen(self):
-        """Full-screen WiFi AP view using Bettercap."""
+        """
+        Displays APs discovered by Bettercap WiFi module.
+        """
         bg = pygame.Surface((self.WIDTH, self.HEIGHT))
         bg.fill((10, 10, 10))
 
@@ -154,156 +264,156 @@ class Game:
 
         title_surf = title_font.render("Bettercap — WiFi APs", True, RED)
 
-        # layout
+        # Layout
         left_margin  = 20
         right_margin = 20
         col_padding  = 24
 
-        def text_width(f, s):
-            return f.size(s)[0]
+        def text_width(font, text):
+            return font.size(text)[0]
 
-        def ellipsize_to_width(f, s, max_px):
-            if text_width(f, s) <= max_px:
-                return s
+        def ellipsize(font, text, limit):
+            if text_width(font, text) <= limit:
+                return text
             ell = "…"
-            ell_w = text_width(f, ell)
-            lo, hi = 0, len(s)
-            best = ""
+            ell_w = text_width(font, ell)
+            lo, hi, best = 0, len(text), ""
             while lo <= hi:
                 mid = (lo + hi) // 2
-                cand = s[:mid]
-                if text_width(f, cand) + ell_w <= max_px:
-                    best = cand
-                    lo = mid + 1
+                if text_width(font, text[:mid]) + ell_w <= limit:
+                    best = text[:mid]
+                    lo += 1
                 else:
-                    hi = mid - 1
+                    hi -= 1
             return best + ell
 
-        BSSID_SAMPLE  = "AA:BB:CC:DD:EE:FF"
-        BSSID_COL_W   = text_width(row_font, BSSID_SAMPLE)
+        BSSID_SAMPLE = "AA:BB:CC:DD:EE:FF"
         SIGNAL_SAMPLE = "-100 dBm"
-        SIGNAL_COL_W  = text_width(row_font, SIGNAL_SAMPLE)
+        BSSID_COL_W = text_width(row_font, BSSID_SAMPLE)
+        SIGNAL_COL_W = text_width(row_font, SIGNAL_SAMPLE)
 
         top_idx = 0
-        running = True
         clock = pygame.time.Clock()
+        running = True
 
         while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
+            for e in pygame.event.get():
+                if e.type == pygame.QUIT:
                     self.stop_bettercap_wifi()
                     pygame.quit()
                     return
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        self.stop_bettercap_wifi()
+
+                elif e.type == pygame.KEYDOWN:
+                    if e.key == pygame.K_ESCAPE:
                         return
-                    elif event.key in (pygame.K_DOWN, pygame.K_s):
+                    elif e.key in (pygame.K_DOWN, pygame.K_s):
                         top_idx += 1
-                    elif event.key in (pygame.K_UP, pygame.K_w):
-                        top_idx = max(0, top_idx - 1)
-                    elif event.key == pygame.K_PAGEDOWN:
-                        top_idx += 10
-                    elif event.key == pygame.K_PAGEUP:
-                        top_idx = max(0, top_idx - 10)
+                    elif e.key in (pygame.K_UP, pygame.K_w):
+                        top_idx -= 1
+                        if top_idx < 0:
+                            top_idx = 0
+                    elif e.key == pygame.K_PAGEDOWN:
+                        top_idx += 8
+                    elif e.key == pygame.K_PAGEUP:
+                        top_idx = max(0, top_idx - 8)
+
+            devices, last_t = self.wifi_client.get_snapshot()
 
             self.screen.blit(bg, (0, 0))
-
-            # title + update age
             self.screen.blit(title_surf, (20, 16))
-            devices, last_t = self.wifi_client.get_snapshot()
-            age = int(time.time() - last_t) if last_t else None
-            age_text = f"Updated: {age}s ago" if age is not None else "Updating…"
-            self.screen.blit(hint_font.render(age_text, True, (180, 180, 180)), (20, 54))
 
-            # dynamic column positions
+            age = int(time.time() - last_t) if last_t else None
+            age_surf = hint_font.render(
+                f"Updated: {age}s ago" if last_t else "Updating…",
+                True,
+                WHITE
+            )
+            self.screen.blit(age_surf, (20, 54))
+
+            # Column positions
             signal_right_x = self.WIDTH - right_margin
             bssid_right_x  = signal_right_x - SIGNAL_COL_W - col_padding
             ssid_left_x    = left_margin
             ssid_right_x   = bssid_right_x - col_padding
             ssid_col_w     = max(50, ssid_right_x - ssid_left_x)
 
-            # headers
-            ssid_hdr  = row_font.render("SSID",   True, (200, 200, 200))
-            bssid_hdr = row_font.render("BSSID",  True, (200, 200, 200))
-            sig_hdr   = row_font.render("SIGNAL", True, (200, 200, 200))
-
-            self.screen.blit(ssid_hdr,  (ssid_left_x, 80))
-            self.screen.blit(bssid_hdr, (bssid_right_x - BSSID_COL_W, 80))
-            self.screen.blit(sig_hdr,   (signal_right_x - text_width(row_font, "SIGNAL"), 80))
+            # Headers
+            self.screen.blit(row_font.render("SSID", True, WHITE), (ssid_left_x, 80))
+            self.screen.blit(row_font.render("BSSID", True, WHITE), (bssid_right_x - BSSID_COL_W, 80))
+            self.screen.blit(row_font.render("SIGNAL", True, WHITE),
+                             (signal_right_x - text_width(row_font, "SIGNAL"), 80))
 
             pygame.draw.line(
                 self.screen, (60, 60, 60),
                 (left_margin, 100), (self.WIDTH - right_margin, 100), 1
             )
 
-            # rows
-            line_y  = 110
-            line_h  = int(18 * self.scale_y)
-            max_top = max(0, len(devices) - 1)
-            top_idx = max(0, min(top_idx, max_top))
-            max_rows = (self.HEIGHT - line_y - 30) // line_h
+            # Rows
+            line_y = 110
+            line_h = int(18 * self.scale_y)
 
-            for dev in devices[top_idx: top_idx + max_rows]:
-                ssid  = dev["ssid"] or "<hidden>"
-                bssid = dev["bssid"]
-                sig   = int(dev["signal"])
+            visible = devices[top_idx: top_idx + ((self.HEIGHT - 140) // line_h)]
 
-                ssid_txt = ellipsize_to_width(row_font, ssid, ssid_col_w)
+            for dev in visible:
+                ssid  = dev.get("ssid") or "<hidden>"
+                bssid = dev.get("bssid") or "??:??:??:??:??:??"
+                sig   = dev.get("signal", -100)
+
+                ssid_txt = ellipsize(row_font, ssid, ssid_col_w)
                 sig_txt  = f"{sig} dBm"
 
-                self.screen.blit(row_font.render(ssid_txt, True, WHITE),
-                                 (ssid_left_x, line_y))
-                self.screen.blit(row_font.render(bssid, True, WHITE),
-                                 (bssid_right_x - BSSID_COL_W, line_y))
-                self.screen.blit(row_font.render(sig_txt, True, WHITE),
-                                 (signal_right_x - text_width(row_font, sig_txt), line_y))
+                self.screen.blit(
+                    row_font.render(ssid_txt, True, WHITE),
+                    (ssid_left_x, line_y)
+                )
+                self.screen.blit(
+                    row_font.render(bssid, True, WHITE),
+                    (bssid_right_x - BSSID_COL_W, line_y)
+                )
+                self.screen.blit(
+                    row_font.render(sig_txt, True, WHITE),
+                    (signal_right_x - text_width(row_font, sig_txt), line_y)
+                )
 
                 line_y += line_h
-                if line_y > self.HEIGHT - 30:
+                if line_y > self.HEIGHT - 40:
                     break
-
-            hint = "↑/↓ PgUp/PgDn to scroll  •  ESC to stop Bettercap & return"
-            self.screen.blit(hint_font.render(hint, True, (160, 160, 160)),
-                             (20, self.HEIGHT - 26))
 
             pygame.display.flip()
             clock.tick(60)
 
-    # ---------- Game world (haunted map) ----------
+    # -------------------------------------------------------------------------
+    #                          GAME WORLD (MAP)
+    # -------------------------------------------------------------------------
     def game_screen(self):
-        print("[GAME] Entering game_screen (map)")
-        world_w, world_h = 1500, 1000
+        print("[GAME] Loading map...")
 
+        world_w, world_h = 1500, 1000
         try:
             self.background = load_and_scale_image(
                 MAP_IMAGE_PATH, (world_w, world_h), use_alpha=False
             )
-            print(f"[GAME] Loaded map: {MAP_IMAGE_PATH}")
         except Exception as e:
-            print(f"[GAME] Failed to load map at {MAP_IMAGE_PATH}: {e}")
+            print(f"[GAME] Failed to load map: {e}")
             self.background = pygame.Surface((world_w, world_h))
             self.background.fill((20, 20, 20))
 
         character = Character([self.WIDTH // 2, self.HEIGHT // 2])
-        camera = Camera(pygame.Rect(0, 0, self.WIDTH, self.HEIGHT), world_w, world_h)
+        camera = Camera(
+            pygame.Rect(0, 0, self.WIDTH, self.HEIGHT),
+            world_w, world_h
+        )
         ui = UI(self.screen, self.background, self.cursor_image)
 
         running = True
         clock = pygame.time.Clock()
 
         while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    if bettercap_is_running():
-                        self.stop_bettercap_wifi()
-                    print("[GAME] QUIT in map -> leaving")
-                    running = False
-                elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    if bettercap_is_running():
-                        self.stop_bettercap_wifi()
-                    print("[GAME] ESC in map -> return to menu")
-                    running = False
+            for e in pygame.event.get():
+                if e.type == pygame.QUIT:
+                    return
+                elif e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE:
+                    return
 
             keys = pygame.key.get_pressed()
             character.move(keys)
@@ -311,13 +421,10 @@ class Game:
 
             cursor_pos = (
                 character.pos[0] - camera.rect.left,
-                character.pos[1] - camera.rect.top,
+                character.pos[1] - camera.rect.top
             )
-
             ui.draw_world(character.pos, camera.rect, cursor_pos)
             clock.tick(60)
-
-        print("[GAME] Exiting game_screen (map)")
 
 
 def game_main_menu():
