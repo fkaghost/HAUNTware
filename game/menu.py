@@ -23,7 +23,15 @@ class Game:
 
         pygame.init()
         pygame.display.set_caption("HAUNTware")
-        self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
+        info = pygame.display.Info()
+        self.WIDTH  = info.current_w
+        self.HEIGHT = info.current_h
+        self.scale_x = self.WIDTH / BASE_WIDTH
+        self.scale_y = self.HEIGHT / BASE_HEIGHT
+        self.screen = pygame.display.set_mode(
+            (self.WIDTH, self.HEIGHT),
+            pygame.FULLSCREEN | pygame.NOFRAME
+        )
         pygame.mouse.set_visible(False)
 
         self.wifi_client = BettercapWifiClient(poll_interval=1.0)
