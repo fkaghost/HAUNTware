@@ -33,16 +33,13 @@ class WifiAdapterScreen:
                     elif event.key in (pygame.K_DOWN, pygame.K_s):
                         self.index = min(len(self.items) - 1, self.index + 1)
                     elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                        label = self.items[self.index][1]
+                        text, surf, label = options[index]
                         if label == "MONITOR":
-                            subprocess.call(["bash", "scripts/set_monitor_wlan1.sh"])
+                            os.system("bash scripts/set_monitor_wlan1.sh")
                         elif label == "MANAGED":
-                            subprocess.call(["bash", "scripts/set_managed_wlan1.sh"])
+                            os.system("bash scripts/set_managed_wlan1.sh")
                         elif label == "BACK":
                             return
-                    elif event.key == pygame.K_ESCAPE:
-                        return
-
             self.draw()
             pygame.display.flip()
             clock.tick(60)
