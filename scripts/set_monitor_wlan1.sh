@@ -1,15 +1,9 @@
-#!/usr/bin/env bash
-set -e
-
+#!/bin/bash
 IFACE="wlan1"
 
-echo "[*] Stopping network manager on $IFACE"
-sudo nmcli dev set $IFACE managed no || true
-sudo ifconfig $IFACE down || true
+sudo ip link set $IFACE down
+sudo iw dev $IFACE set type monitor
+sudo ip link set $IFACE up
 
-echo "[*] Enabling monitor mode"
-sudo iwconfig $IFACE mode monitor
-
-sudo ifconfig $IFACE up
-
-echo "[*] wlan1 is now in MONITOR MODE"
+iwconfig $IFACE
+echo "[INFO] wlan1 is now in MONITOR MODE"
